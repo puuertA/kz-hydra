@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
+  <title>KZ Hydra | Perfis</title><link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body data-page="players">
+  <header><div class="container nav"><div class="brand"></div><nav class="nav-links"><a data-page="home" href="index.html">Home</a><a data-page="leaderboards" href="leaderboards.html">Leaderboards</a><a data-page="players" href="players.html">Perfis</a><a data-page="maps" href="maps.html">Mapas</a><a data-page="activity" href="activity.html">Atividade</a><a data-page="rules" href="rules.html">Regras/Bans</a><a data-page="guide" href="guide.html">Guia</a><a data-page="contact" href="contact.html">Contato</a></nav></div></header>
+
+  <main class="container">
+    <section class="hero"><h1>Perfis de jogadores</h1><p>Busque por nickname ou SteamID64 para ver stats detalhadas e histórico.</p></section>
+    <section class="grid">
+      <article class="card search-card">
+        <div class="filters">
+          <div class="player-search-field">
+            <label>Nickname ou SteamID64</label>
+            <input id="player-steamid" placeholder="ex.: albert einstein ou 7656119..." autocomplete="off" />
+            <div id="player-search-list" class="search-dropdown" hidden></div>
+          </div>
+          <div class="filter-action"><button class="btn" id="player-search" data-idle-label="Buscar perfil" data-loading-label="Buscando..."><span class="btn-label">Buscar perfil</span></button></div>
+        </div>
+      </article>
+      <article class="card row-12"><h3>Resumo</h3><div id="player-summary" class="notice">Digite um nickname ou SteamID64 e clique em buscar.</div></article>
+      <article class="card row-12"><h3>Stats</h3><div id="player-stats" class="notice">Aguardando busca.</div></article>
+      <article class="card"><h3>Histórico de records</h3><div class="table-wrap"><table><thead><tr><th>Mapa</th><th>Modo</th><th>Tempo</th><th>TP</th><th>Pontos</th></tr></thead><tbody id="player-records-body"></tbody></table></div></article>
+      <article class="card" id="players-fallback"></article>
+    </section>
+  </main>
+
+  <footer><div class="container">© <span id="year"></span> KZ Hydra</div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/ux.js?v=4"></script>
+</body>
+</html>

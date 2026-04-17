@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
+  <title>KZ Hydra | Regras e Bans</title><link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body data-page="rules">
+  <header><div class="container nav"><div class="brand"></div><nav class="nav-links"><a data-page="home" href="index.html">Home</a><a data-page="leaderboards" href="leaderboards.html">Leaderboards</a><a data-page="players" href="players.html">Perfis</a><a data-page="maps" href="maps.html">Mapas</a><a data-page="activity" href="activity.html">Atividade</a><a data-page="rules" href="rules.html">Regras/Bans</a><a data-page="guide" href="guide.html">Guia</a><a data-page="contact" href="contact.html">Contato</a></nav></div></header>
+
+  <main class="container">
+    <section class="hero"><h1>Regras e bans</h1><p>Jogue limpo, respeite a comunidade e evite punições.</p></section>
+    <section class="grid">
+      <article class="card row-6"><h3>Regras principais</h3><ul><li>Sem scripts, cheats, macros ou exploits.</li><li>Sem toxicidade, racismo, assédio ou spam.</li><li>Respeite decisões da staff; use o canal de recurso.</li><li>Não abuse de bugs de mapa para inflar ranking.</li></ul></article>
+      <article class="card row-6"><h3>Punições</h3><ul><li><span class="tag">Leve</span> mute/kick.</li><li><span class="tag">Média</span> ban temporário.</li><li><span class="tag">Grave</span> ban permanente e remoção de records.</li></ul></article>
+      <article class="card"><h3>Lista de bans ativos</h3><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Servidor</th><th>Expira</th></tr></thead><tbody id="bans-body"></tbody></table></div><p class="notice">Dados via endpoint público de bans da API GOKZ.</p></article>
+      <article class="card" id="rules-fallback"></article>
+    </section>
+  </main>
+
+  <footer><div class="container">© <span id="year"></span> KZ Hydra</div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/ux.js?v=4"></script>
+</body>
+</html>

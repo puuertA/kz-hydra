@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
+  <title>KZ Hydra | Home</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body data-page="home">
+  <header>
+    <div class="container nav">
+      <div class="brand"></div>
+      <nav class="nav-links">
+        <a data-page="home" href="index.html">Home</a>
+        <a data-page="leaderboards" href="leaderboards.html">Leaderboards</a>
+        <a data-page="players" href="players.html">Perfis</a>
+        <a data-page="maps" href="maps.html">Mapas</a>
+        <a data-page="activity" href="activity.html">Atividade</a>
+        <a data-page="rules" href="rules.html">Regras/Bans</a>
+        <a data-page="guide" href="guide.html">Guia</a>
+        <a data-page="contact" href="contact.html">Contato</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <img class="hero-logo" src="assets/images/LOGO KZ HYDRA PNG.png" alt="Logo KZ Hydra" />
+      <h1>KZ Hydra</h1>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Status do ecossistema</h2>
+        <div class="kpi-row">
+          <div class="kpi"><div class="label">API</div><div class="value" id="kpi-health">-</div></div>
+          <div class="kpi"><div class="label">Players online</div><div class="value" id="kpi-players">-</div></div>
+          <div class="kpi"><div class="label">Servidores online</div><div class="value" id="kpi-servers">-</div></div>
+          <div class="kpi"><div class="label">Records recentes</div><div class="value" id="kpi-records">-</div></div>
+        </div>
+        <p><a class="btn" id="connect-server-btn" href="#">Conectar no servidor</a></p>
+      </article>
+
+      <article class="card row-8">
+        <h3>Records recentes</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Jogador</th><th>Mapa</th><th>Modo</th><th>Tempo</th><th>TP</th><th>Data</th></tr>
+            </thead>
+            <tbody id="recent-records-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card row-4">
+        <h3>Servidores ativos</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Servidor</th><th>Mapa</th><th>Players</th><th>Status</th></tr>
+            </thead>
+            <tbody id="servers-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card" id="home-fallback"></article>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">© <span id="year"></span> KZ Hydra — comunidade brasileira de GOKZ.</div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script src="assets/js/api.js?v=2"></script>
+  <script src="assets/js/main.js?v=12"></script>
+  <script type="module" src="assets/js/ux.js?v=4"></script>
+</body>
+</html>

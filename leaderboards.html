@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
+  <title>KZ Hydra | Leaderboards</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body data-page="leaderboards">
+  <header>
+    <div class="container nav">
+      <div class="brand"></div>
+      <nav class="nav-links">
+        <a data-page="home" href="index.html">Home</a><a data-page="leaderboards" href="leaderboards.html">Leaderboards</a><a data-page="players" href="players.html">Perfis</a><a data-page="maps" href="maps.html">Mapas</a><a data-page="activity" href="activity.html">Atividade</a><a data-page="rules" href="rules.html">Regras/Bans</a><a data-page="guide" href="guide.html">Guia</a><a data-page="contact" href="contact.html">Contato</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero"><h1>Leaderboards</h1><p>Ranking global, por modo e por período.</p></section>
+    <section class="grid">
+      <article class="card">
+        <div class="filters">
+          <div><label>Modo</label><select id="lb-mode"><option value="kz_timer">KZT</option><option value="kz_simple">SKZ</option><option value="kz_vanilla">VNL</option><option value="kz_noperfkz">NKZ</option></select></div>
+          <div><label>Período (Destaques)</label><select id="lb-period"><option value="day">Dia</option><option value="week">Semana</option><option value="month" selected>Mês</option><option value="year">Ano</option></select></div>
+        </div>
+        <div class="leaderboards-loading" id="leaderboards-loading" hidden>
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <span>Carregando leaderboard...</span>
+        </div>
+      </article>
+
+      <article class="card row-8">
+        <h3>Ranking Hydra KZ</h3>
+        <div class="table-wrap"><table><thead><tr><th>Posição</th><th>Jogador</th><th>Rating</th><th>Pontos</th><th>Mapas</th></tr></thead><tbody id="lb-global-body"></tbody></table></div>
+      </article>
+      <article class="card row-4">
+        <h3>Destaques do Período</h3>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th>Pontos</th><th>TP</th><th>PRO</th></tr></thead><tbody id="lb-fire-body"></tbody></table></div>
+      </article>
+      <article class="card" id="leaderboards-fallback"></article>
+    </section>
+  </main>
+
+  <footer><div class="container">© <span id="year"></span> KZ Hydra</div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/ux.js?v=4"></script>
+</body>
+</html>

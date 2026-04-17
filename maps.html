@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
+  <title>KZ Hydra | Mapas</title><link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body data-page="maps">
+  <header><div class="container nav"><div class="brand"></div><nav class="nav-links"><a data-page="home" href="index.html">Home</a><a data-page="leaderboards" href="leaderboards.html">Leaderboards</a><a data-page="players" href="players.html">Perfis</a><a data-page="maps" href="maps.html">Mapas</a><a data-page="activity" href="activity.html">Atividade</a><a data-page="rules" href="rules.html">Regras/Bans</a><a data-page="guide" href="guide.html">Guia</a><a data-page="contact" href="contact.html">Contato</a></nav></div></header>
+
+  <main class="container">
+    <section class="hero"><h1>Mapas</h1><p>Top 10, dificuldade, records e taxa de conclusão.</p></section>
+    <section class="grid">
+      <article class="card">
+        <div class="filters">
+          <div><label>Nome do mapa</label><input id="maps-name" placeholder="kz_" /></div>
+          <div><label>Dificuldade</label><select id="maps-difficulty"><option value="">Todas</option><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option><option value="4">Tier 4</option><option value="5">Tier 5</option><option value="6">Tier 6</option><option value="7">Tier 7</option><option value="8">Tier 8</option></select></div>
+          <div><label>&nbsp;</label><button id="maps-search" class="btn">Filtrar</button></div>
+        </div>
+      </article>
+      <article class="card row-8"><h3>Lista de mapas</h3><div class="table-wrap"><table><thead><tr><th>Mapa</th><th>Dificuldade</th><th>Validado</th><th>Autores</th><th>Atualizado</th></tr></thead><tbody id="maps-body"></tbody></table></div></article>
+      <article class="card row-4"><h3>Top 10 por mapa</h3><input id="map-selected" placeholder="Nome exato do mapa" /><p><button id="map-top10" class="btn">Carregar Top 10</button></p><div id="map-info" class="notice">Escolha um mapa para ver detalhes.</div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th>Tempo</th><th>TP</th><th>Pontos</th></tr></thead><tbody id="map-top10-body"></tbody></table></div></article>
+      <article class="card" id="maps-fallback"></article>
+    </section>
+  </main>
+
+  <footer><div class="container">© <span id="year"></span> KZ Hydra</div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/ux.js?v=4"></script>
+</body>
+</html>
