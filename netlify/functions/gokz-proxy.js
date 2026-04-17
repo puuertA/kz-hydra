@@ -1,5 +1,44 @@
 const GOKZ_API_BASE = "https://api.gokz.top/api/v1";
 
+function normalizePath(value) {
+  const path = String(value || "").trim();
+  if (!path) return "";
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+function resolveProxiedPath(rawPath) {
+  const path = normalizePath(rawPath);
+  if (!path) return "";
+
+  const netlifyPrefix = "/.netlify/functions/gokz-proxy";
+  if (path.startsWith(netlifyPrefix)) {
+    const sliced = path.slice(netlifyPrefix.length);
+    return normalizePath(sliced);
+  }
+
+  const apiPrefix = "/api";
+  if (path.startsWith(apiPrefix)) {
+    const sliced = path.slice(apiPrefix.length);
+    return normalizePath(sliced);
+  }
+
+  return "";
+}
+
+function resolveQuery(event) {
+  if (event.rawQuery) return `?${event.rawQuery}`;
+
+  const query = new URLSearchParams();
+  const source = event.queryStringParameters || {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined || value === null) continue;
+    query.set(key, String(value));
+  }
+
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
 function buildCorsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin || "*",
@@ -31,10 +70,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const rawPath = String(event.path || "");
-  const marker = "/.netlify/functions/gokz-proxy/";
-  const markerIndex = rawPath.indexOf(marker);
-  const proxiedPath = markerIndex >= 0 ? rawPath.slice(markerIndex + marker.length - 1) : "";
+  const proxiedPath = resolveProxiedPath(event.path);
 
   if (!proxiedPath || proxiedPath === "/") {
     return {
@@ -47,7 +83,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const query = event.rawQuery ? `?${event.rawQuery}` : "";
+  const query = resolveQuery(event);
   const upstreamUrl = `${GOKZ_API_BASE}${proxiedPath}${query}`;
 
   try {
