@@ -1,4 +1,10 @@
-const API_BASE = "https://api.gokz.top/api/v1";
+function resolveApiBase() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  const isNetlifyHost = host.endsWith(".netlify.app");
+  return isNetlifyHost ? "/api" : "https://api.gokz.top/api/v1";
+}
+
+const API_BASE = resolveApiBase();
 
 const HYDRA_SERVER_CONFIG = {
   serverName: "Hydra KZ",

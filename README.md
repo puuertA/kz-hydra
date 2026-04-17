@@ -97,6 +97,14 @@ Por ser um site estático, você pode publicar facilmente em:
 - Cloudflare Pages
 - GitHub Pages
 
+### Netlify (CORS da API)
+
+No Netlify, este projeto usa uma **Netlify Function proxy** para evitar bloqueio de CORS da API GOKZ:
+
+- Function: `netlify/functions/gokz-proxy.js`
+- Redirect: `/api/*` → `/.netlify/functions/gokz-proxy/:splat` (em `netlify.toml`)
+- O frontend detecta `*.netlify.app` e usa `/api` automaticamente.
+
 ## 📌 Próximos passos sugeridos
 
 - Backend próprio para cache/fallback dos endpoints

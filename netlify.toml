@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+  command = "echo no-build"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/gokz-proxy/:splat"
+  status = 200
