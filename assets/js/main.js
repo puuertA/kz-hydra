@@ -707,6 +707,44 @@ async function initPlayers() {
   };
   let selectedSteamId64 = "";
   let searchDebounceTimer = null;
+  let isModeSwitchAnimating = false;
+
+  function animateModeSwitch(nextMode) {
+    const summaryEl = document.getElementById("player-summary");
+    const statsEl = document.getElementById("player-stats");
+    const recordsEl = document.getElementById("player-records-body");
+    const leaveTargets = [summaryEl, statsEl, recordsEl].filter(Boolean);
+
+    leaveTargets.forEach((element) => {
+      element.classList.remove("profile-mode-switch-enter", "is-mode-swapping");
+      element.classList.add("profile-mode-switch-leave");
+    });
+
+    window.setTimeout(() => {
+      selectedMode = nextMode;
+      renderProfileSummary();
+      renderModeScopedStats();
+      renderModeScopedRecords();
+
+      const enterTargets = [
+        document.getElementById("player-summary"),
+        document.getElementById("player-stats"),
+        document.getElementById("player-records-body")
+      ].filter(Boolean);
+
+      enterTargets.forEach((element) => {
+        element.classList.remove("profile-mode-switch-leave");
+        element.classList.add("profile-mode-switch-enter", "is-mode-swapping");
+      });
+
+      window.setTimeout(() => {
+        enterTargets.forEach((element) => {
+          element.classList.remove("profile-mode-switch-enter", "is-mode-swapping");
+        });
+        isModeSwitchAnimating = false;
+      }, 360);
+    }, 130);
+  }
 
   function formatRankValue(rankValue) {
     return rankValue ? `#${rankValue}` : "-";
@@ -903,10 +941,9 @@ async function initPlayers() {
     if (!button) return;
     const nextMode = button.getAttribute("data-mode-switch");
     if (!isSupportedProfileMode(nextMode) || nextMode === selectedMode) return;
-    selectedMode = nextMode;
-    renderProfileSummary();
-    renderModeScopedStats();
-    renderModeScopedRecords();
+    if (isModeSwitchAnimating) return;
+    isModeSwitchAnimating = true;
+    animateModeSwitch(nextMode);
   });
 
   function setSearchLoading(isLoading) {

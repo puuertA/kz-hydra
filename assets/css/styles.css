@@ -802,6 +802,65 @@ header {
   background: linear-gradient(120deg, rgba(111, 43, 222, 0.85), rgba(154, 92, 255, 0.8));
 }
 
+#player-summary,
+#player-stats,
+#player-records-body {
+  transition: opacity 0.14s ease, transform 0.18s ease, filter 0.22s ease;
+}
+
+.profile-mode-switch-leave {
+  opacity: 0;
+  transform: translateY(6px) scale(0.995);
+  filter: saturate(0.86);
+}
+
+.profile-mode-switch-enter {
+  animation: profileModeSwitchIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.is-mode-swapping .profile-mode-highlight {
+  animation: profileModeHighlightPulse 0.34s ease;
+}
+
+.is-mode-swapping .profile-pill-rating,
+.is-mode-swapping .mode-stat-pane,
+.is-mode-swapping .mode-stat-total {
+  animation: profileModeToneShift 0.34s ease;
+}
+
+@keyframes profileModeSwitchIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.995);
+    filter: saturate(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: saturate(1);
+  }
+}
+
+@keyframes profileModeHighlightPulse {
+  0% {
+    filter: brightness(0.86) saturate(0.8);
+    transform: scale(0.985);
+  }
+  100% {
+    filter: brightness(1) saturate(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes profileModeToneShift {
+  0% {
+    filter: brightness(0.9) saturate(0.8);
+  }
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+}
+
 .mode-stat-card {
   border: 1px solid var(--border);
   border-radius: 10px;
