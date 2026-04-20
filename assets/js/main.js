@@ -218,6 +218,31 @@ function rankTitleToneClass(rankTitle) {
   return "tone-unranked";
 }
 
+function ratingAccentRgbFromValue(ratingValue) {
+  const numericRating = Number(ratingValue);
+  const safeValue = Number.isFinite(numericRating) ? numericRating : 0;
+  if (safeValue > 10) {
+    return [182, 110, 255];
+  }
+  const ratingInteger = Math.max(0, Math.floor(safeValue));
+  const ratingRankIndex = Math.max(0, Math.min(10, ratingInteger));
+  const ratingRankPalette = [
+    [107, 114, 128],
+    [156, 163, 175],
+    [148, 163, 184],
+    [125, 166, 201],
+    [110, 186, 236],
+    [125, 211, 252],
+    [74, 222, 128],
+    [248, 113, 113],
+    [250, 204, 21],
+    [196, 181, 253],
+    [196, 181, 253]
+  ];
+
+  return ratingRankPalette[ratingRankIndex];
+}
+
 function ensureRecentPlayerPreviewElement() {
   if (recentPlayerPreviewState.element) return recentPlayerPreviewState.element;
 
@@ -260,7 +285,8 @@ function renderRecentPlayerPreviewContent(payload) {
   const ratingDisplay = escapeHtml(payload.ratingDisplay || "-");
   const pointsDisplay = escapeHtml(payload.pointsDisplay || "-");
   const modeTitle = escapeHtml(payload.modeTitle || "Unranked");
-  const modeToneClass = escapeHtml(payload.modeToneClass || "tone-unranked");
+  const modeToneClassRaw = String(payload.modeToneClass || "tone-unranked");
+  const modeToneClass = escapeHtml(modeToneClassRaw);
   const modeRankPosition = payload.modeRank ? ` • #${escapeHtml(payload.modeRank)}` : "";
   const flag = countryFlagHtml(countryCode, "country-flag country-flag-sm recent-player-preview-flag");
   const numericRating = Number(payload.ratingValue);
@@ -269,21 +295,7 @@ function renderRecentPlayerPreviewContent(payload) {
   const ratingInteger = Math.max(0, Math.floor(safeRatingValue));
   const ratingProgressInTier = Math.max(0, Math.min(0.99, safeRatingValue - ratingInteger));
   const ratingPercent = ratingProgressInTier * 100;
-  const ratingRankIndex = Math.max(0, Math.min(10, ratingInteger));
-  const ratingRankPalette = [
-    [107, 114, 128],
-    [156, 163, 175],
-    [148, 163, 184],
-    [125, 166, 201],
-    [110, 186, 236],
-    [125, 211, 252],
-    [74, 222, 128],
-    [248, 113, 113],
-    [250, 204, 21],
-    [196, 181, 253],
-    [196, 181, 253]
-  ];
-  const accentRgb = ratingRankPalette[ratingRankIndex];
+  const accentRgb = ratingAccentRgbFromValue(safeRatingValue);
   const accentColor = `rgb(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]})`;
   const accentSoftColor = `rgba(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]}, 0.3)`;
   const accentGlowColor = `rgba(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]}, 0.55)`;
@@ -437,10 +449,8 @@ async function showRecentPlayerPreview(link, event) {
   }
 }
 
-function bindHomeRecentPlayerPreviews() {
-  if (document.body.dataset.page !== "home") return;
-
-  const links = document.querySelectorAll("#recent-records-body .player-profile-link[data-preview-steamid]");
+function bindPlayerPreviewLinks(selector) {
+  const links = document.querySelectorAll(selector);
   if (!links.length) return;
 
   if (!recentPlayerPreviewState.viewportBound) {
@@ -587,7 +597,7 @@ async function initHome() {
     `;
     });
 
-    bindHomeRecentPlayerPreviews();
+    bindPlayerPreviewLinks("#recent-records-body .player-profile-link[data-preview-steamid]");
 
     const serverList = servers
       .sort((a, b) => (b.player_count || 0) - (a.player_count || 0))
@@ -652,7 +662,7 @@ async function initLeaderboards() {
       renderRows("lb-global-body", globalLb.data || [], (row) => `
         <tr>
           <td>#${row.rank}</td>
-          <td><a class="player-profile-link" href="${playerProfileHref(row)}">${escapeHtml(playerName(row))}</a></td>
+          <td><a class="player-profile-link" href="${playerProfileHref(row)}" data-preview-steamid="${escapeHtml(String(row.steamid64 || ""))}" data-preview-mode="${escapeHtml(modeLabelFromApiMode(mode.value))}" data-preview-name="${escapeHtml(playerName(row))}">${escapeHtml(playerName(row))}</a></td>
           <td>${row.rating?.toFixed?.(0) ?? row.rating ?? "-"}</td>
           <td>${row.points ?? "-"}</td>
           <td>${row.map_finished ?? "-"}</td>
@@ -662,12 +672,14 @@ async function initLeaderboards() {
       renderRows("lb-fire-body", periodHighlights.data || [], (row) => `
         <tr>
           <td>#${row.rank}</td>
-          <td><a class="player-profile-link" href="${playerProfileHref(row)}">${escapeHtml(playerName(row))}</a></td>
+          <td><a class="player-profile-link" href="${playerProfileHref(row)}" data-preview-steamid="${escapeHtml(String(row.steamid64 || ""))}" data-preview-mode="${escapeHtml(modeLabelFromApiMode(mode.value))}" data-preview-name="${escapeHtml(playerName(row))}">${escapeHtml(playerName(row))}</a></td>
           <td>${row.points ?? "-"}</td>
           <td>${row.tp_finishes ?? 0}</td>
           <td>${row.pro_finishes ?? 0}</td>
         </tr>
       `);
+
+      bindPlayerPreviewLinks("#lb-global-body .player-profile-link[data-preview-steamid], #lb-fire-body .player-profile-link[data-preview-steamid]");
     } catch (error) {
       if (currentLoadId !== activeLoadId) return;
       setTableError("lb-global-body", "Falha ao carregar ranking.", 5);
@@ -808,22 +820,7 @@ async function initPlayers() {
     const ratingInteger = Math.max(0, Math.floor(ratingValue));
     const ratingProgressInTier = Math.max(0, Math.min(0.99, ratingValue - ratingInteger));
     const ratingPercent = ratingProgressInTier * 100;
-    const ratingRankIndex = Math.max(0, Math.min(10, ratingInteger));
-    const ratingRankPalette = [
-      [107, 114, 128],
-      [156, 163, 175],
-      [148, 163, 184],
-      [125, 166, 201],
-      [110, 186, 236],
-      [125, 211, 252],
-      [74, 222, 128],
-      [248, 113, 113],
-      [250, 204, 21],
-      [196, 181, 253],
-      [196, 181, 253]
-    ];
-
-    const accentRgb = ratingRankPalette[ratingRankIndex];
+    const accentRgb = ratingAccentRgbFromValue(ratingValue);
 
     const accentColor = `rgb(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]})`;
     const accentSoftColor = `rgba(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]}, 0.3)`;

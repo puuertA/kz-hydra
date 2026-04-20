@@ -593,6 +593,10 @@ header {
   background: linear-gradient(120deg, rgba(147, 51, 234, 0.86), rgba(76, 29, 149, 0.95));
 }
 
+.profile-mode-highlight.tone-legend em {
+  color: #d9c2ff;
+}
+
 .profile-mode-highlight.tone-unranked {
   border-color: rgba(107, 114, 128, 0.6);
   background: linear-gradient(120deg, rgba(55, 65, 81, 0.82), rgba(17, 24, 39, 0.95));
@@ -992,6 +996,38 @@ header {
   overflow-y: auto;
 }
 
+.leaderboard-fire-wrap {
+  overflow-x: hidden;
+}
+
+.leaderboard-fire-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.leaderboard-fire-table th,
+.leaderboard-fire-table td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.leaderboard-fire-table th {
+  white-space: nowrap;
+}
+
+.leaderboard-fire-table th:nth-child(2),
+.leaderboard-fire-table td:nth-child(2) {
+  min-width: 120px;
+}
+
+.leaderboard-fire-table td:nth-child(2) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -1074,6 +1110,14 @@ td {
 
 .row-4 {
   grid-column: span 4;
+}
+
+.row-5 {
+  grid-column: span 5;
+}
+
+.row-7 {
+  grid-column: span 7;
 }
 
 .row-8 {
@@ -1473,6 +1517,8 @@ body[data-page="players"] .search-card .filter-action .btn {
 }
 
 @media (max-width: 900px) {
+  .row-7,
+  .row-5,
   .row-8,
   .row-6,
   .row-4 {
