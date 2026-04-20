@@ -629,12 +629,54 @@ function ensureRecentPlayerPreviewElement() {
 
 function modeLabelFromPreviewMode(value) {
   const input = String(value || "").trim();
-  if (!input) return "SKZ";
+  if (!input) return "AUTO";
 
   const upper = input.toUpperCase();
+  if (upper === "AUTO") return "AUTO";
   if (["VNL", "SKZ", "KZT"].includes(upper)) return upper;
 
   return modeLabelFromApiMode(input);
+}
+
+function chooseBestPreviewMode(modeProfiles, fallbackMode = "SKZ") {
+  const modes = ["KZT", "SKZ", "VNL"];
+  const titleWeightMap = {
+    Unranked: 0,
+    Rookie: 1,
+    Beginner: 2,
+    Intermediate: 3,
+    Experienced: 4,
+    Advanced: 5,
+    Regular: 6,
+    Professional: 7,
+    Master: 8,
+    Legend: 9
+  };
+
+  const entries = modes.map((mode) => {
+    const profile = modeProfiles?.[mode] || null;
+    const rankRaw = Number(profile?.rank);
+    const rank = Number.isFinite(rankRaw) && rankRaw > 0 ? rankRaw : null;
+    const points = asNumber(profile?.points);
+    const title = apiRankTitleFromPoints(points);
+    const titleWeight = titleWeightMap[title] ?? 0;
+    return { mode, profile, rank, points, titleWeight };
+  });
+
+  const best = entries.sort((first, second) => {
+    if (first.titleWeight !== second.titleWeight) return second.titleWeight - first.titleWeight;
+    if (first.points !== second.points) return second.points - first.points;
+    if (first.rank !== null && second.rank !== null && first.rank !== second.rank) return first.rank - second.rank;
+    if (first.rank !== null && second.rank === null) return -1;
+    if (first.rank === null && second.rank !== null) return 1;
+    return modes.indexOf(first.mode) - modes.indexOf(second.mode);
+  });
+
+  if (best.length && (best[0].titleWeight > 0 || best[0].rank !== null || best[0].points > 0)) {
+    return best[0].mode;
+  }
+
+  return modes.includes(String(fallbackMode || "").toUpperCase()) ? String(fallbackMode).toUpperCase() : "SKZ";
 }
 
 function renderRecentPlayerPreviewLoading() {
@@ -740,15 +782,34 @@ function scheduleHideRecentPlayerPreview(delay = 90) {
 }
 
 async function fetchRecentPlayerPreviewData(steamid64, previewMode, fallbackName) {
-  const modeLabel = modeLabelFromPreviewMode(previewMode);
-  const cacheKey = `${steamid64}|${modeLabel}`;
+  const requestedMode = modeLabelFromPreviewMode(previewMode);
+  const cacheKey = `${steamid64}|${requestedMode}`;
 
   if (!recentPlayerPreviewState.cache.has(cacheKey)) {
     const pending = (async () => {
-      const [playerProfile, modeProfile] = await Promise.all([
-        gokzApi.player(steamid64),
-        gokzApi.playerModeLeaderboard(steamid64, profileModeToApiMode(modeLabel)).catch(() => null)
-      ]);
+      const shouldAutoSelectMode = requestedMode === "AUTO";
+      const [playerProfile, kztModeProfile, skzModeProfile, vnlModeProfile] = shouldAutoSelectMode
+        ? await Promise.all([
+            gokzApi.player(steamid64),
+            gokzApi.playerModeLeaderboard(steamid64, "kz_timer").catch(() => null),
+            gokzApi.playerModeLeaderboard(steamid64, "kz_simple").catch(() => null),
+            gokzApi.playerModeLeaderboard(steamid64, "kz_vanilla").catch(() => null)
+          ])
+        : await Promise.all([
+            gokzApi.player(steamid64),
+            gokzApi.playerModeLeaderboard(steamid64, profileModeToApiMode(requestedMode)).catch(() => null),
+            Promise.resolve(null),
+            Promise.resolve(null)
+          ]);
+
+      const modeProfiles = {
+        KZT: kztModeProfile,
+        SKZ: skzModeProfile,
+        VNL: vnlModeProfile
+      };
+
+      const modeLabel = shouldAutoSelectMode ? chooseBestPreviewMode(modeProfiles, "SKZ") : requestedMode;
+      const modeProfile = shouldAutoSelectMode ? modeProfiles[modeLabel] || null : kztModeProfile;
 
       const ratingRaw = Number(modeProfile?.rating ?? playerProfile?.rating ?? NaN);
       const pointsRaw = asNumber(modeProfile?.points);
@@ -783,7 +844,7 @@ async function showRecentPlayerPreview(link, event) {
   const steamid64 = String(link?.dataset.previewSteamid || "").trim();
 
   const preview = ensureRecentPlayerPreviewElement();
-  const previewMode = link.dataset.previewMode || "SKZ";
+  const previewMode = link.dataset.previewMode || "AUTO";
   const fallbackName = link.dataset.previewName || "";
 
   if (recentPlayerPreviewState.hideTimer) {
@@ -2394,6 +2455,7 @@ async function initRules() {
 }
 
 function initSimplePage() {
+  bindPlayerPreviewLinks(".player-profile-link[data-preview-steamid]");
   return;
 }
 
