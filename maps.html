@@ -11,12 +11,16 @@
   <main class="container">
     <section class="hero"><h1>Mapas</h1><p>Top 10, dificuldade, records e taxa de conclusão.</p></section>
     <section class="grid">
-      <article class="card">
+      <article class="card search-card maps-search-card">
         <div class="filters">
-          <div><label>Nome do mapa</label><input id="maps-name" placeholder="kz_" /></div>
+          <div class="player-search-field">
+            <label>Nome do mapa</label>
+            <input id="maps-name" placeholder="kz_" autocomplete="off" />
+            <div id="maps-search-list" class="search-dropdown" hidden></div>
+          </div>
           <div><label>Dificuldade</label><select id="maps-difficulty"><option value="">Todas</option><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option><option value="4">Tier 4</option><option value="5">Tier 5</option><option value="6">Tier 6</option><option value="7">Tier 7</option><option value="8">Tier 8</option></select></div>
-          <div><label>Escopo</label><select id="maps-scope"><option value="global">Global</option><option value="hydra">Só Hydra</option></select></div>
-          <div><label>&nbsp;</label><button id="maps-search" class="btn">Filtrar</button></div>
+          <div><label>Escopo</label><select id="maps-scope"><option value="global">Global</option><option value="hydra">Hydra</option></select></div>
+          <div class="filter-action"><button id="maps-search" class="btn">Filtrar</button></div>
         </div>
       </article>
       <article class="card row-8"><h3>Lista de mapas</h3><div class="table-wrap"><table><thead><tr><th>Mapa</th><th>Dificuldade</th><th>Validado</th><th>Autores</th><th>Atualizado</th></tr></thead><tbody id="maps-body"></tbody></table></div></article>

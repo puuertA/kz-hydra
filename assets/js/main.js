@@ -167,6 +167,22 @@ function mapPreviewImageUrl(mapData) {
   return found ? String(found).trim() : "";
 }
 
+function normalizeTierValue(value) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 8) return null;
+  return parsed;
+}
+
+function tierBadgeHtml(value, { compact = false, emptyLabel = "-" } = {}) {
+  const tier = normalizeTierValue(value);
+  if (!tier) {
+    return `<span class="tier-badge tier-badge-na">${escapeHtml(String(emptyLabel || "-"))}</span>`;
+  }
+
+  const label = compact ? `T${tier}` : `Tier ${tier}`;
+  return `<span class="tier-badge tier-badge-${tier}">${label}</span>`;
+}
+
 function ensureRecentMapPreviewElement() {
   if (recentMapPreviewState.element) return recentMapPreviewState.element;
 
@@ -245,7 +261,7 @@ function renderRecentMapPreviewError(mapName) {
 function renderRecentMapPreviewContent(payload) {
   const mapName = escapeHtml(payload.mapName || "Mapa");
   const imageUrl = escapeHtml(payload.imageUrl || "");
-  const tier = escapeHtml(payload.tierLabel || "-");
+  const tierBadge = tierBadgeHtml(payload.tierValue, { emptyLabel: payload.tierLabel || "-" });
   const avgTop10Kzt = escapeHtml(payload.avgTop10Kzt || "-");
   const updatedOn = escapeHtml(payload.updatedOn || "-");
   const completionsTotal = escapeHtml(payload.completionsTotal || "-");
@@ -272,7 +288,7 @@ function renderRecentMapPreviewContent(payload) {
     </span>
   </div>
   <div class="recent-map-preview-stats">
-    <div class="recent-map-preview-pill"><span>Tier</span><strong>${tier}</strong></div>
+    <div class="recent-map-preview-pill"><span>Tier</span>${tierBadge}</div>
     <div class="recent-map-preview-pill"><span>Média Top 10 (KZT)</span><strong>${avgTop10Kzt}</strong></div>
     <div class="recent-map-preview-pill"><span>Conclusões (3 modos)</span><strong>${completionsTotal}</strong></div>
     <div class="recent-map-preview-pill"><span>Atualizado</span><strong>${updatedOn}</strong></div>
@@ -324,6 +340,7 @@ async function fetchRecentMapPreviewData(mapName) {
       return {
         mapName: resolvedName,
         imageUrl: gokzMapImageUrl(resolvedName),
+        tierValue: resolvedTier,
         tierLabel: resolvedTier === null || resolvedTier === undefined ? "-" : `Tier ${resolvedTier}`,
         avgTop10Kzt: Number.isFinite(averageKzt) ? fmtSeconds(averageKzt) : "-",
         updatedOn,
@@ -1525,11 +1542,18 @@ async function initPlayers() {
 
 async function initMaps() {
   const name = document.getElementById("maps-name");
+  const mapsSearchList = document.getElementById("maps-search-list");
   const diff = document.getElementById("maps-difficulty");
   const scope = document.getElementById("maps-scope");
   const search = document.getElementById("maps-search");
   const top10Btn = document.getElementById("map-top10");
   const selected = document.getElementById("map-selected");
+  let mapsSearchDebounceTimer = null;
+  let mapsSearchRequestId = 0;
+  let allMapsCache = [];
+  let mapsCachePromise = null;
+  let syncDifficultyDropdownUi = null;
+  let syncScopeDropdownUi = null;
 
   function mapsScopeFromQuery(value) {
     return String(value || "").trim().toLowerCase() === "hydra" ? "hydra" : "global";
@@ -1544,6 +1568,379 @@ async function initMaps() {
     scope.value = mapsScopeFromQuery(mapsParams.get("scope"));
   }
 
+  async function getAllMapsCache() {
+    if (allMapsCache.length) return allMapsCache;
+
+    if (!mapsCachePromise) {
+      mapsCachePromise = gokzApi
+        .maps({ limit: 10000, offset: 0, name: "", difficulty: "" })
+        .then((rows) => {
+          allMapsCache = Array.isArray(rows) ? rows : [];
+          return allMapsCache;
+        })
+        .catch(() => {
+          allMapsCache = [];
+          return allMapsCache;
+        });
+    }
+
+    return mapsCachePromise;
+  }
+
+  function initDifficultyCustomSelect() {
+    if (!diff) return;
+    if (diff.dataset.customTierSelect === "1") return;
+
+    const parent = diff.parentElement;
+    if (!parent) return;
+
+    diff.dataset.customTierSelect = "1";
+    parent.classList.add("tier-select-field");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "tier-select";
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "tier-select-trigger";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+
+    const menu = document.createElement("div");
+    menu.className = "tier-select-menu";
+    menu.setAttribute("role", "listbox");
+    menu.hidden = true;
+
+    const optionButtons = [];
+    Array.from(diff.options).forEach((option) => {
+      const value = String(option.value || "");
+      const label = String(option.textContent || "").trim() || "-";
+      const tier = normalizeTierValue(value);
+
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "tier-select-option";
+      item.setAttribute("role", "option");
+      item.dataset.value = value;
+      item.innerHTML = `<span class="tier-option-chip ${tier ? `tier-option-chip-${tier}` : "tier-option-chip-na"}" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
+
+      menu.appendChild(item);
+      optionButtons.push(item);
+    });
+
+    parent.insertBefore(wrapper, diff);
+    wrapper.appendChild(diff);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(menu);
+    diff.classList.add("tier-select-native");
+
+    const closeMenu = () => {
+      menu.hidden = true;
+      wrapper.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+    };
+
+    const openMenu = () => {
+      if (diff.disabled) return;
+      menu.hidden = false;
+      wrapper.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+    };
+
+    const renderCurrentState = () => {
+      const selectedOption = diff.options[diff.selectedIndex] || diff.options[0];
+      const selectedValue = String(selectedOption?.value || "");
+      const selectedLabel = String(selectedOption?.textContent || "").trim() || "-";
+      const selectedTier = normalizeTierValue(selectedValue);
+
+      trigger.innerHTML = `<span class="tier-select-trigger-label"><span class="tier-option-chip ${selectedTier ? `tier-option-chip-${selectedTier}` : "tier-option-chip-na"}" aria-hidden="true"></span><span>${escapeHtml(selectedLabel)}</span></span><span class="tier-select-trigger-arrow" aria-hidden="true"></span>`;
+      trigger.disabled = diff.disabled;
+      wrapper.classList.toggle("is-disabled", Boolean(diff.disabled));
+
+      optionButtons.forEach((button) => {
+        const isSelected = button.dataset.value === selectedValue;
+        button.classList.toggle("is-selected", isSelected);
+        button.setAttribute("aria-selected", isSelected ? "true" : "false");
+      });
+    };
+
+    trigger.addEventListener("click", () => {
+      if (menu.hidden) {
+        openMenu();
+      } else {
+        closeMenu();
+      }
+    });
+
+    menu.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const button = target.closest(".tier-select-option[data-value]");
+      if (!button) return;
+
+      const nextValue = String(button.getAttribute("data-value") || "");
+      if (diff.value !== nextValue) {
+        diff.value = nextValue;
+        diff.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        renderCurrentState();
+      }
+
+      closeMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest(".tier-select") === wrapper) return;
+      closeMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      closeMenu();
+    });
+
+    diff.addEventListener("change", renderCurrentState);
+    renderCurrentState();
+    syncDifficultyDropdownUi = renderCurrentState;
+  }
+
+  function initScopeCustomSelect() {
+    if (!scope) return;
+    if (scope.dataset.customTierSelect === "1") return;
+
+    const parent = scope.parentElement;
+    if (!parent) return;
+
+    scope.dataset.customTierSelect = "1";
+    parent.classList.add("tier-select-field");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "tier-select";
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "tier-select-trigger";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+
+    const menu = document.createElement("div");
+    menu.className = "tier-select-menu";
+    menu.setAttribute("role", "listbox");
+    menu.hidden = true;
+
+    const optionButtons = [];
+    Array.from(scope.options).forEach((option) => {
+      const value = String(option.value || "");
+      const label = String(option.textContent || "").trim() || "-";
+
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "tier-select-option";
+      item.setAttribute("role", "option");
+      item.dataset.value = value;
+      item.innerHTML = `<span>${escapeHtml(label)}</span>`;
+
+      menu.appendChild(item);
+      optionButtons.push(item);
+    });
+
+    parent.insertBefore(wrapper, scope);
+    wrapper.appendChild(scope);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(menu);
+    scope.classList.add("tier-select-native");
+
+    const closeMenu = () => {
+      menu.hidden = true;
+      wrapper.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+    };
+
+    const openMenu = () => {
+      if (scope.disabled) return;
+      menu.hidden = false;
+      wrapper.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+    };
+
+    const renderCurrentState = () => {
+      const selectedOption = scope.options[scope.selectedIndex] || scope.options[0];
+      const selectedValue = String(selectedOption?.value || "");
+      const selectedLabel = String(selectedOption?.textContent || "").trim() || "-";
+
+      trigger.innerHTML = `<span class="tier-select-trigger-label"><span>${escapeHtml(selectedLabel)}</span></span><span class="tier-select-trigger-arrow" aria-hidden="true"></span>`;
+      trigger.disabled = scope.disabled;
+      wrapper.classList.toggle("is-disabled", Boolean(scope.disabled));
+
+      optionButtons.forEach((button) => {
+        const isSelected = button.dataset.value === selectedValue;
+        button.classList.toggle("is-selected", isSelected);
+        button.setAttribute("aria-selected", isSelected ? "true" : "false");
+      });
+    };
+
+    trigger.addEventListener("click", () => {
+      if (menu.hidden) {
+        openMenu();
+      } else {
+        closeMenu();
+      }
+    });
+
+    menu.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const button = target.closest(".tier-select-option[data-value]");
+      if (!button) return;
+
+      const nextValue = String(button.getAttribute("data-value") || "");
+      if (scope.value !== nextValue) {
+        scope.value = nextValue;
+        scope.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        renderCurrentState();
+      }
+
+      closeMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest(".tier-select") === wrapper) return;
+      closeMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      closeMenu();
+    });
+
+    scope.addEventListener("change", renderCurrentState);
+    renderCurrentState();
+    syncScopeDropdownUi = renderCurrentState;
+  }
+
+  function syncDifficultyTheme() {
+    if (!diff) return;
+    const tier = normalizeTierValue(diff.value);
+    if (!tier) {
+      delete diff.dataset.tierSelected;
+    } else {
+      diff.dataset.tierSelected = String(tier);
+    }
+
+    if (typeof syncDifficultyDropdownUi === "function") {
+      syncDifficultyDropdownUi();
+    }
+  }
+
+  function syncScopeTheme() {
+    if (typeof syncScopeDropdownUi === "function") {
+      syncScopeDropdownUi();
+    }
+  }
+
+  function filterMapsLocally(rows, query, difficultyValue, limit = null) {
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    const difficulty = String(difficultyValue || "").trim();
+
+    const filtered = (rows || []).filter((map) => {
+      const mapName = String(map?.name || "").toLowerCase();
+      const passesName = !normalizedQuery || mapName.includes(normalizedQuery);
+      const passesDifficulty = difficulty === "" || String(map?.difficulty ?? "") === difficulty;
+      return passesName && passesDifficulty;
+    });
+
+    if (typeof limit === "number" && limit >= 0) {
+      return filtered.slice(0, limit);
+    }
+
+    return filtered;
+  }
+
+  function hideMapsSearchList() {
+    if (!mapsSearchList) return;
+    mapsSearchList.hidden = true;
+    mapsSearchList.innerHTML = "";
+  }
+
+  function renderMapsSearchList(items, query) {
+    if (!mapsSearchList) return;
+
+    if (!items.length) {
+      mapsSearchList.innerHTML = `<div class="search-dropdown-empty">Nenhum mapa encontrado para "${escapeHtml(query)}".</div>`;
+      mapsSearchList.hidden = false;
+      return;
+    }
+
+    mapsSearchList.innerHTML = items
+      .map((item) => {
+        const mapName = escapeHtml(item.name || "-");
+        const tierBadge = tierBadgeHtml(item.difficulty, { compact: true, emptyLabel: "-" });
+        const updated = fmtDate(item.updated_on);
+        const mapImagePrimary = gokzMapImageUrl(item.name || "");
+        const mapImageFallback = `https://raw.githubusercontent.com/KZGlobalTeam/map-images/public/webp/${encodeURIComponent(String(item.name || "").trim())}.webp`;
+        const mapImageUrl = escapeHtml(mapImagePrimary);
+        const mapImageFallbackUrl = escapeHtml(mapImageFallback);
+
+        return `<button type="button" class="search-dropdown-item" data-select-map-name="${escapeHtml(item.name || "")}">
+          <span class="search-dropdown-main">
+            <span class="search-dropdown-avatar-wrap">
+              ${mapImageUrl ? `<img class="search-dropdown-avatar" src="${mapImageUrl}" data-fallback-src="${mapImageFallbackUrl}" alt="Preview ${mapName}" loading="lazy" referrerpolicy="no-referrer" onerror="if(this.dataset.fallbackTried==='1'){ this.style.display='none'; const fb=this.nextElementSibling; if(fb) fb.hidden=false; return; } this.dataset.fallbackTried='1'; const nextSrc=this.dataset.fallbackSrc; if(nextSrc){ this.src=nextSrc; return; } this.style.display='none'; const fb=this.nextElementSibling; if(fb) fb.hidden=false;" />` : ""}
+              <span class="search-dropdown-avatar-fallback" ${mapImageUrl ? "hidden" : ""}>🗺️</span>
+            </span>
+            <span class="search-dropdown-texts">
+              <strong class="search-dropdown-name">${mapName}</strong>
+              <span class="search-dropdown-meta">${tierBadge}<span>${escapeHtml(updated)}</span></span>
+            </span>
+          </span>
+        </button>`;
+      })
+      .join("");
+
+    mapsSearchList.hidden = false;
+  }
+
+  async function loadMapSuggestions() {
+    if (!mapsSearchList) return;
+    const query = String(name?.value || "").trim();
+
+    if (query.length < 2) {
+      hideMapsSearchList();
+      return;
+    }
+
+    const requestId = ++mapsSearchRequestId;
+
+    try {
+      const rows = await getAllMapsCache();
+      if (requestId !== mapsSearchRequestId) return;
+
+      const source = rows.length ? rows : await gokzApi.maps({ limit: 200, name: query, difficulty: "" });
+
+      const sorted = filterMapsLocally(source, query, "", 12)
+        .slice()
+        .sort((first, second) => String(first.name || "").localeCompare(String(second.name || ""), "pt-BR"));
+
+      renderMapsSearchList(sorted, query);
+    } catch {
+      if (requestId !== mapsSearchRequestId) return;
+      mapsSearchList.innerHTML = `<div class="search-dropdown-empty">Não foi possível carregar sugestões agora.</div>`;
+      mapsSearchList.hidden = false;
+    }
+  }
+
+  function scheduleDynamicMapSearch() {
+    if (mapsSearchDebounceTimer) {
+      clearTimeout(mapsSearchDebounceTimer);
+    }
+
+    mapsSearchDebounceTimer = setTimeout(loadMapSuggestions, 260);
+  }
+
   function setMapsTableLoading(tbodyId, columnCount, label) {
     setHTML(
       tbodyId,
@@ -1555,17 +1952,24 @@ async function initMaps() {
     if (search) search.disabled = isLoading;
     if (top10Btn) top10Btn.disabled = isLoading;
     if (scope) scope.disabled = isLoading;
+    if (diff) diff.disabled = isLoading;
+    syncDifficultyTheme();
+    syncScopeTheme();
   }
 
   async function loadMaps() {
     setMapsControlsLoading(true);
     setMapsTableLoading("maps-body", 5, "Carregando mapas...");
     try {
-      const maps = await gokzApi.maps({ limit: 60, name: name.value.trim(), difficulty: diff.value });
+      const rows = await getAllMapsCache();
+      const source = rows.length
+        ? rows
+        : await gokzApi.maps({ limit: 60, name: name.value.trim(), difficulty: diff.value });
+      const maps = filterMapsLocally(source, name.value.trim(), diff.value, 60);
       renderRows("maps-body", maps, (map) => `
         <tr>
           <td><a class="map-profile-link" href="${mapProfileHref(map.name)}" data-preview-map="${escapeHtml(map.name || "")}">${escapeHtml(map.name || "-")}</a></td>
-          <td>${map.difficulty ?? "-"}</td>
+          <td>${tierBadgeHtml(map.difficulty)}</td>
           <td>${map.validated ? "Sim" : "Não"}</td>
           <td>${(map.authors || []).map((a) => a.alias || a.name).filter(Boolean).join(", ") || "-"}</td>
           <td>${fmtDate(map.updated_on)}</td>
@@ -1602,7 +2006,7 @@ async function initMaps() {
 
       setHTML(
         "map-info",
-        `<p><span class=\"tag\">Mapa</span> <a class=\"map-profile-link\" href=\"${mapProfileHref(map.name)}\" data-preview-map=\"${escapeHtml(map.name || "")}\">${escapeHtml(map.name || "-")}</a> | <span class=\"tag\">Escopo</span> ${scopedToHydra ? "Só Hydra" : "Global"} | <span class=\"tag\">Dificuldade</span> ${map.difficulty ?? "-"} | <span class=\"tag\">Conclusões</span> ${completions}</p>`
+        `<p><span class=\"tag\">Mapa</span> <a class=\"map-profile-link\" href=\"${mapProfileHref(map.name)}\" data-preview-map=\"${escapeHtml(map.name || "")}\">${escapeHtml(map.name || "-")}</a> | <span class=\"tag\">Escopo</span> ${scopedToHydra ? "Só Hydra" : "Global"} | <span class=\"tag\">Dificuldade</span> ${tierBadgeHtml(map.difficulty)} | <span class=\"tag\">Conclusões</span> ${completions}</p>`
       );
       bindMapPreviewLinks("#map-info .map-profile-link[data-preview-map]");
 
@@ -1623,12 +2027,66 @@ async function initMaps() {
     }
   }
 
+  initDifficultyCustomSelect();
+  initScopeCustomSelect();
+
   search?.addEventListener("click", loadMaps);
+  diff?.addEventListener("change", () => {
+    syncDifficultyTheme();
+    loadMaps();
+  });
   top10Btn?.addEventListener("click", loadTop10);
   scope?.addEventListener("change", () => {
+    syncScopeTheme();
     if (!selected.value.trim()) return;
     loadTop10();
   });
+
+  name?.addEventListener("input", () => {
+    scheduleDynamicMapSearch();
+  });
+
+  name?.addEventListener("focus", () => {
+    if (String(name.value || "").trim().length >= 2) {
+      loadMapSuggestions();
+    }
+  });
+
+  name?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (mapsSearchDebounceTimer) {
+        clearTimeout(mapsSearchDebounceTimer);
+      }
+      hideMapsSearchList();
+      loadMaps();
+    }
+  });
+
+  mapsSearchList?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest("[data-select-map-name]");
+    if (!button) return;
+
+    const selectedMapName = String(button.getAttribute("data-select-map-name") || "").trim();
+    if (!selectedMapName) return;
+
+    name.value = selectedMapName;
+    selected.value = selectedMapName;
+    hideMapsSearchList();
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("#maps-search-list") || target.closest("#maps-name")) return;
+    hideMapsSearchList();
+  });
+
+  syncDifficultyTheme();
+  syncScopeTheme();
+
   await loadMaps();
 }
 
@@ -1750,7 +2208,7 @@ async function initMapProfile() {
           </div>
           <div class="map-profile-meta">
             <h3>${escapeHtml(mapData.name || mapName)}</h3>
-            <p><span class="tag">Dificuldade</span> ${mapData.difficulty ?? "-"}</p>
+            <p><span class="tag">Dificuldade</span> ${tierBadgeHtml(mapData.difficulty)}</p>
             <p><span class="tag">Validado</span> ${validatedLabel}</p>
             <p><span class="tag">Autores</span> ${escapeHtml(authors)}</p>
             <p><span class="tag">Atualizado</span> ${fmtDate(mapData.updated_on)}</p>
