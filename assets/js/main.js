@@ -1,7 +1,7 @@
 function setActiveNav() {
   const page = document.body.dataset.page;
   document.querySelectorAll(".nav-links a").forEach((link) => {
-    if (link.dataset.page === page) {
+    if (link.dataset.page === page || (page === "map-profile" && link.dataset.page === "maps")) {
       link.classList.add("active");
     }
   });
@@ -12,6 +12,14 @@ const HYDRA_CLIENT_CONFIG = {
 };
 
 const recentPlayerPreviewState = {
+  cache: new Map(),
+  element: null,
+  activeLink: null,
+  hideTimer: null,
+  viewportBound: false
+};
+
+const recentMapPreviewState = {
   cache: new Map(),
   element: null,
   activeLink: null,
@@ -114,6 +122,349 @@ function playerProfileHref(entry) {
   }
 
   return "players.html";
+}
+
+function mapProfileHref(mapName) {
+  const safeMapName = String(mapName || "").trim();
+  if (!safeMapName) return "map-profile.html";
+  return `map-profile.html?name=${encodeURIComponent(safeMapName)}`;
+}
+
+function gokzMapImageUrl(mapName) {
+  const safeMapName = String(mapName || "").trim();
+  if (!safeMapName) return "";
+  return `https://github.com/KZGlobalTeam/map-images/raw/public/webp/${encodeURIComponent(safeMapName)}.webp`;
+}
+
+function mapPreviewImageUrl(mapData) {
+  if (!mapData || typeof mapData !== "object") return "";
+
+  const mapName =
+    mapData.name ||
+    mapData.map_name ||
+    mapData.mapName ||
+    mapData.slug ||
+    mapData.identifier;
+
+  const gokzImage = gokzMapImageUrl(mapName);
+  if (gokzImage) return gokzImage;
+
+  const candidates = [
+    mapData.image_url,
+    mapData.image,
+    mapData.thumbnail_url,
+    mapData.thumb_url,
+    mapData.preview_url,
+    mapData.workshop_thumbnail,
+    mapData.workshop_image,
+    mapData.workshop_preview,
+    mapData?.workshop?.image,
+    mapData?.workshop?.preview,
+    mapData?.workshop?.preview_url
+  ];
+
+  const found = candidates.find((value) => typeof value === "string" && value.trim());
+  return found ? String(found).trim() : "";
+}
+
+function ensureRecentMapPreviewElement() {
+  if (recentMapPreviewState.element) return recentMapPreviewState.element;
+
+  let element = document.getElementById("recent-map-preview");
+  if (!element) {
+    element = document.createElement("div");
+    element.id = "recent-map-preview";
+    element.className = "recent-map-preview";
+    element.hidden = true;
+    document.body.appendChild(element);
+  }
+
+  recentMapPreviewState.element = element;
+  return element;
+}
+
+function mapNameFromPreviewLink(link) {
+  const datasetName = String(link?.dataset?.previewMap || "").trim();
+  if (datasetName) return datasetName;
+
+  const textName = String(link?.textContent || "").trim();
+  if (textName && textName !== "-") return textName;
+
+  const href = String(link?.getAttribute("href") || "").trim();
+  if (!href) return "";
+
+  try {
+    const parsed = new URL(href, window.location.href);
+    return String(parsed.searchParams.get("name") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function averageTimeFromRows(rows) {
+  const values = (rows || [])
+    .map((row) => Number(row?.time))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!values.length) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+
+function buildWrSummary(rows) {
+  const wrRow = Array.isArray(rows) && rows.length ? rows[0] : null;
+  if (!wrRow) {
+    return {
+      time: "-",
+      player: "Sem record",
+      teleports: ""
+    };
+  }
+
+  const wrTime = Number(wrRow.time);
+  const wrPlayer = String(wrRow.player_name || wrRow.player_alias || wrRow.steamid64 || "-");
+  const wrTeleports = wrRow.teleports === null || wrRow.teleports === undefined ? "" : ` • TP ${wrRow.teleports}`;
+
+  return {
+    time: Number.isFinite(wrTime) ? fmtSeconds(wrTime) : "-",
+    player: wrPlayer,
+    teleports: wrTeleports
+  };
+}
+
+function renderRecentMapPreviewLoading(mapName) {
+  const safeMapName = escapeHtml(String(mapName || "").trim());
+  return `<div class="recent-map-preview-loading">Carregando dados do mapa${safeMapName ? ` <strong>${safeMapName}</strong>` : ""}...</div>`;
+}
+
+function renderRecentMapPreviewError(mapName) {
+  const safeMapName = escapeHtml(String(mapName || "").trim());
+  return `<div class="recent-map-preview-loading">Não foi possível carregar a prévia${safeMapName ? ` de <strong>${safeMapName}</strong>` : ""}.</div>`;
+}
+
+function renderRecentMapPreviewContent(payload) {
+  const mapName = escapeHtml(payload.mapName || "Mapa");
+  const imageUrl = escapeHtml(payload.imageUrl || "");
+  const tier = escapeHtml(payload.tierLabel || "-");
+  const avgTop10Kzt = escapeHtml(payload.avgTop10Kzt || "-");
+  const updatedOn = escapeHtml(payload.updatedOn || "-");
+  const completionsTotal = escapeHtml(payload.completionsTotal || "-");
+
+  const wrKztTime = escapeHtml(payload.wrKzt?.time || "-");
+  const wrKztPlayer = escapeHtml(payload.wrKzt?.player || "-");
+  const wrKztTp = escapeHtml(payload.wrKzt?.teleports || "");
+
+  const wrSkzTime = escapeHtml(payload.wrSkz?.time || "-");
+  const wrSkzPlayer = escapeHtml(payload.wrSkz?.player || "-");
+  const wrSkzTp = escapeHtml(payload.wrSkz?.teleports || "");
+
+  const wrVnlTime = escapeHtml(payload.wrVnl?.time || "-");
+  const wrVnlPlayer = escapeHtml(payload.wrVnl?.player || "-");
+  const wrVnlTp = escapeHtml(payload.wrVnl?.teleports || "");
+
+  return `<div class="recent-map-preview-head">
+    <span class="recent-map-preview-cover-wrap">
+      <img class="recent-map-preview-cover" src="${imageUrl}" alt="Preview do mapa ${mapName}" loading="lazy" referrerpolicy="no-referrer" />
+    </span>
+    <span class="recent-map-preview-main">
+      <strong class="recent-map-preview-name">${mapName}</strong>
+      <span class="recent-map-preview-meta">Dados oficiais GOKZ (Hydra)</span>
+    </span>
+  </div>
+  <div class="recent-map-preview-stats">
+    <div class="recent-map-preview-pill"><span>Tier</span><strong>${tier}</strong></div>
+    <div class="recent-map-preview-pill"><span>Média Top 10 (KZT)</span><strong>${avgTop10Kzt}</strong></div>
+    <div class="recent-map-preview-pill"><span>Conclusões (3 modos)</span><strong>${completionsTotal}</strong></div>
+    <div class="recent-map-preview-pill"><span>Atualizado</span><strong>${updatedOn}</strong></div>
+  </div>
+  <div class="recent-map-preview-wr-list">
+    <div class="recent-map-preview-wr-row"><span>WR KZT</span><strong>${wrKztTime}</strong><em>${wrKztPlayer}${wrKztTp}</em></div>
+    <div class="recent-map-preview-wr-row"><span>WR SKZ</span><strong>${wrSkzTime}</strong><em>${wrSkzPlayer}${wrSkzTp}</em></div>
+    <div class="recent-map-preview-wr-row"><span>WR VNL</span><strong>${wrVnlTime}</strong><em>${wrVnlPlayer}${wrVnlTp}</em></div>
+  </div>`;
+}
+
+async function fetchRecentMapPreviewData(mapName) {
+  const safeMapName = String(mapName || "").trim();
+  if (!safeMapName) {
+    throw new Error("map_name_missing");
+  }
+
+  const cacheKey = safeMapName.toLowerCase();
+  if (!recentMapPreviewState.cache.has(cacheKey)) {
+    const pending = (async () => {
+      const [mapData, kztRows, skzRows, vnlRows, countKzt, countSkz, countVnl] = await Promise.all([
+        gokzApi.mapByName(safeMapName).catch(() => null),
+        gokzApi.mapLeaderboard({ mapName: safeMapName, mode: "kz_timer", stage: 0, limit: 10, scopedToHydra: false }).catch(() => []),
+        gokzApi.mapLeaderboard({ mapName: safeMapName, mode: "kz_simple", stage: 0, limit: 10, scopedToHydra: false }).catch(() => []),
+        gokzApi.mapLeaderboard({ mapName: safeMapName, mode: "kz_vanilla", stage: 0, limit: 10, scopedToHydra: false }).catch(() => []),
+        gokzApi.mapPlayerCount({ mapName: safeMapName, mode: "kz_timer", stage: 0, scopedToHydra: false }).catch(() => 0),
+        gokzApi.mapPlayerCount({ mapName: safeMapName, mode: "kz_simple", stage: 0, scopedToHydra: false }).catch(() => 0),
+        gokzApi.mapPlayerCount({ mapName: safeMapName, mode: "kz_vanilla", stage: 0, scopedToHydra: false }).catch(() => 0)
+      ]);
+
+      const averageKzt = averageTimeFromRows(kztRows);
+      const resolvedName =
+        mapData?.name ||
+        kztRows?.[0]?.map_name ||
+        skzRows?.[0]?.map_name ||
+        vnlRows?.[0]?.map_name ||
+        safeMapName;
+
+      const resolvedTier =
+        mapData?.difficulty ??
+        kztRows?.[0]?.map_tier ??
+        skzRows?.[0]?.map_tier ??
+        vnlRows?.[0]?.map_tier ??
+        null;
+
+      const updatedOn = fmtDate(mapData?.updated_on);
+      const totalCompletions = asNumber(countKzt) + asNumber(countSkz) + asNumber(countVnl);
+
+      return {
+        mapName: resolvedName,
+        imageUrl: gokzMapImageUrl(resolvedName),
+        tierLabel: resolvedTier === null || resolvedTier === undefined ? "-" : `Tier ${resolvedTier}`,
+        avgTop10Kzt: Number.isFinite(averageKzt) ? fmtSeconds(averageKzt) : "-",
+        updatedOn,
+        completionsTotal: Math.round(totalCompletions).toLocaleString("pt-BR"),
+        wrKzt: buildWrSummary(kztRows),
+        wrSkz: buildWrSummary(skzRows),
+        wrVnl: buildWrSummary(vnlRows)
+      };
+    })();
+
+    recentMapPreviewState.cache.set(cacheKey, pending);
+  }
+
+  try {
+    return await recentMapPreviewState.cache.get(cacheKey);
+  } catch (error) {
+    recentMapPreviewState.cache.delete(cacheKey);
+    throw error;
+  }
+}
+
+function positionRecentMapPreview(event) {
+  const preview = ensureRecentMapPreviewElement();
+  if (!preview || preview.hidden) return;
+
+  const viewportPadding = 10;
+  const offset = 14;
+  const clientX = Number(event?.clientX ?? 0);
+  const clientY = Number(event?.clientY ?? 0);
+
+  let left = clientX + offset;
+  let top = clientY + offset;
+
+  const rect = preview.getBoundingClientRect();
+  if (left + rect.width > window.innerWidth - viewportPadding) {
+    left = clientX - rect.width - offset;
+  }
+
+  if (top + rect.height > window.innerHeight - viewportPadding) {
+    top = clientY - rect.height - offset;
+  }
+
+  preview.style.left = `${Math.max(viewportPadding, left)}px`;
+  preview.style.top = `${Math.max(viewportPadding, top)}px`;
+}
+
+function hideRecentMapPreview() {
+  const preview = ensureRecentMapPreviewElement();
+  recentMapPreviewState.activeLink = null;
+  preview.classList.remove("is-visible");
+  preview.hidden = true;
+}
+
+function scheduleHideRecentMapPreview(delay = 90) {
+  if (recentMapPreviewState.hideTimer) {
+    clearTimeout(recentMapPreviewState.hideTimer);
+  }
+
+  recentMapPreviewState.hideTimer = setTimeout(() => {
+    hideRecentMapPreview();
+  }, delay);
+}
+
+async function showRecentMapPreview(link, event) {
+  const preview = ensureRecentMapPreviewElement();
+  const mapName = mapNameFromPreviewLink(link);
+
+  if (recentMapPreviewState.hideTimer) {
+    clearTimeout(recentMapPreviewState.hideTimer);
+  }
+
+  recentMapPreviewState.activeLink = link;
+  preview.innerHTML = renderRecentMapPreviewLoading(mapName);
+  preview.hidden = false;
+  preview.classList.add("is-visible");
+  positionRecentMapPreview(event);
+
+  if (!mapName) {
+    preview.innerHTML = `<div class="recent-map-preview-loading">Prévia indisponível para este mapa.</div>`;
+    positionRecentMapPreview(event);
+    return;
+  }
+
+  try {
+    const [payload] = await Promise.all([
+      fetchRecentMapPreviewData(mapName),
+      new Promise((resolve) => setTimeout(resolve, 140))
+    ]);
+
+    if (recentMapPreviewState.activeLink !== link) return;
+    preview.innerHTML = renderRecentMapPreviewContent(payload);
+    positionRecentMapPreview(event);
+  } catch {
+    if (recentMapPreviewState.activeLink !== link) return;
+    preview.innerHTML = renderRecentMapPreviewError(mapName);
+    positionRecentMapPreview(event);
+  }
+}
+
+function bindMapPreviewLinks(selector) {
+  const links = document.querySelectorAll(selector);
+  if (!links.length) return;
+
+  if (!recentMapPreviewState.viewportBound) {
+    recentMapPreviewState.viewportBound = true;
+    window.addEventListener("scroll", () => scheduleHideRecentMapPreview(0), { passive: true });
+    window.addEventListener("resize", () => scheduleHideRecentMapPreview(0));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") scheduleHideRecentMapPreview(0);
+    });
+  }
+
+  links.forEach((link) => {
+    if (link.dataset.mapPreviewBound === "true") return;
+    link.dataset.mapPreviewBound = "true";
+
+    link.addEventListener("mouseenter", (event) => {
+      showRecentMapPreview(link, event);
+    });
+
+    link.addEventListener("mousemove", (event) => {
+      if (recentMapPreviewState.activeLink !== link) return;
+      positionRecentMapPreview(event);
+    });
+
+    link.addEventListener("mouseleave", () => {
+      scheduleHideRecentMapPreview();
+    });
+
+    link.addEventListener("focus", () => {
+      const rect = link.getBoundingClientRect();
+      showRecentMapPreview(link, {
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.bottom + 8
+      });
+    });
+
+    link.addEventListener("blur", () => {
+      scheduleHideRecentMapPreview(0);
+    });
+  });
 }
 
 function setText(id, value) {
@@ -1175,59 +1526,364 @@ async function initPlayers() {
 async function initMaps() {
   const name = document.getElementById("maps-name");
   const diff = document.getElementById("maps-difficulty");
+  const scope = document.getElementById("maps-scope");
   const search = document.getElementById("maps-search");
   const top10Btn = document.getElementById("map-top10");
   const selected = document.getElementById("map-selected");
 
+  function mapsScopeFromQuery(value) {
+    return String(value || "").trim().toLowerCase() === "hydra" ? "hydra" : "global";
+  }
+
+  function isHydraMapsScope() {
+    return String(scope?.value || "global") === "hydra";
+  }
+
+  const mapsParams = new URLSearchParams(window.location.search);
+  if (scope) {
+    scope.value = mapsScopeFromQuery(mapsParams.get("scope"));
+  }
+
+  function setMapsTableLoading(tbodyId, columnCount, label) {
+    setHTML(
+      tbodyId,
+      `<tr><td colspan="${columnCount}"><div class="leaderboard-loading-cell"><span class="loading-spinner" aria-hidden="true"></span><span>${label}</span></div></td></tr>`
+    );
+  }
+
+  function setMapsControlsLoading(isLoading) {
+    if (search) search.disabled = isLoading;
+    if (top10Btn) top10Btn.disabled = isLoading;
+    if (scope) scope.disabled = isLoading;
+  }
+
   async function loadMaps() {
+    setMapsControlsLoading(true);
+    setMapsTableLoading("maps-body", 5, "Carregando mapas...");
     try {
       const maps = await gokzApi.maps({ limit: 60, name: name.value.trim(), difficulty: diff.value });
       renderRows("maps-body", maps, (map) => `
         <tr>
-          <td>${map.name}</td>
+          <td><a class="map-profile-link" href="${mapProfileHref(map.name)}" data-preview-map="${escapeHtml(map.name || "")}">${escapeHtml(map.name || "-")}</a></td>
           <td>${map.difficulty ?? "-"}</td>
           <td>${map.validated ? "Sim" : "Não"}</td>
           <td>${(map.authors || []).map((a) => a.alias || a.name).filter(Boolean).join(", ") || "-"}</td>
           <td>${fmtDate(map.updated_on)}</td>
         </tr>
       `);
+      bindMapPreviewLinks("#maps-body .map-profile-link[data-preview-map]");
       if (maps[0]?.name && !selected.value) selected.value = maps[0].name;
     } catch (error) {
       toastError("maps-fallback", error);
+    } finally {
+      setMapsControlsLoading(false);
     }
   }
 
   async function loadTop10() {
     if (!selected.value.trim()) return;
+    setMapsControlsLoading(true);
+    setMapsTableLoading("map-top10-body", 5, "Carregando Top 10...");
+    setHTML(
+      "map-info",
+      `<div class="leaderboard-loading-cell"><span class="loading-spinner" aria-hidden="true"></span><span>Atualizando detalhes do mapa...</span></div>`
+    );
+    const scopedToHydra = isHydraMapsScope();
+    const params = new URLSearchParams(window.location.search);
+    params.set("scope", scopedToHydra ? "hydra" : "global");
+    window.history.replaceState(null, "", `maps.html?${params.toString()}`);
+
     try {
       const [map, leaderboard, completions] = await Promise.all([
         gokzApi.mapByName(selected.value.trim()),
-        gokzApi.mapLeaderboard({ mapName: selected.value.trim(), mode: "kz_timer", stage: 0, limit: 10 }),
-        gokzApi.mapPlayerCount({ mapName: selected.value.trim(), mode: "kz_timer", stage: 0 })
+        gokzApi.mapLeaderboard({ mapName: selected.value.trim(), mode: "kz_timer", stage: 0, limit: 10, scopedToHydra }),
+        gokzApi.mapPlayerCount({ mapName: selected.value.trim(), mode: "kz_timer", stage: 0, scopedToHydra })
       ]);
 
       setHTML(
         "map-info",
-        `<p><span class=\"tag\">Mapa</span> ${map.name} | <span class=\"tag\">Dificuldade</span> ${map.difficulty ?? "-"} | <span class=\"tag\">Conclusões</span> ${completions}</p>`
+        `<p><span class=\"tag\">Mapa</span> <a class=\"map-profile-link\" href=\"${mapProfileHref(map.name)}\" data-preview-map=\"${escapeHtml(map.name || "")}\">${escapeHtml(map.name || "-")}</a> | <span class=\"tag\">Escopo</span> ${scopedToHydra ? "Só Hydra" : "Global"} | <span class=\"tag\">Dificuldade</span> ${map.difficulty ?? "-"} | <span class=\"tag\">Conclusões</span> ${completions}</p>`
       );
+      bindMapPreviewLinks("#map-info .map-profile-link[data-preview-map]");
 
       renderRows("map-top10-body", leaderboard, (row, index) => `
         <tr>
           <td>#${index + 1}</td>
-          <td>${playerName(row)}</td>
+          <td><a class="player-profile-link" href="${playerProfileHref(row)}" data-preview-steamid="${escapeHtml(String(row.steamid64 || ""))}" data-preview-mode="${escapeHtml(modeLabelFromApiMode("kz_timer"))}" data-preview-name="${escapeHtml(playerName(row))}">${escapeHtml(playerName(row))}</a></td>
           <td>${fmtSeconds(row.time)}</td>
           <td>${row.teleports ?? "-"}</td>
           <td>${row.points ?? "-"}</td>
         </tr>
       `);
+      bindPlayerPreviewLinks("#map-top10-body .player-profile-link[data-preview-steamid]");
     } catch (error) {
       toastError("maps-fallback", error);
+    } finally {
+      setMapsControlsLoading(false);
     }
   }
 
   search?.addEventListener("click", loadMaps);
   top10Btn?.addEventListener("click", loadTop10);
+  scope?.addEventListener("change", () => {
+    if (!selected.value.trim()) return;
+    loadTop10();
+  });
   await loadMaps();
+}
+
+async function initMapProfile() {
+  const params = new URLSearchParams(window.location.search);
+  const mapName = (params.get("name") || "").trim();
+  const modeSelect = document.getElementById("map-profile-mode");
+  const scopeSelect = document.getElementById("map-profile-scope");
+  let mapProfileCounts = {
+    kzt: 0,
+    skz: 0,
+    vnl: 0
+  };
+
+  function modeFromQuery(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "kzt" || normalized === "kz_timer") return "kz_timer";
+    if (normalized === "skz" || normalized === "kz_simple") return "kz_simple";
+    if (normalized === "vnl" || normalized === "kz_vanilla") return "kz_vanilla";
+    return "kz_timer";
+  }
+
+  function modeToQuery(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "kz_timer") return "kzt";
+    if (normalized === "kz_simple") return "skz";
+    if (normalized === "kz_vanilla") return "vnl";
+    return "kzt";
+  }
+
+  function scopeFromQuery(value) {
+    return String(value || "").trim().toLowerCase() === "hydra" ? "hydra" : "global";
+  }
+
+  function isHydraScope() {
+    return String(scopeSelect?.value || "global") === "hydra";
+  }
+
+  function wrLabel(row) {
+    if (!row) return "-";
+    const time = Number(row.time);
+    if (!Number.isFinite(time)) return "-";
+    const player = playerName(row);
+    const tp = row.teleports === null || row.teleports === undefined ? "" : ` • TP ${row.teleports}`;
+    return `${fmtSeconds(time)} • ${escapeHtml(player)}${tp}`;
+  }
+
+  function averageTime(rows) {
+    const values = (rows || [])
+      .map((row) => Number(row?.time))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!values.length) return "-";
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return fmtSeconds(total / values.length);
+  }
+
+  const initialMode = modeFromQuery(params.get("mode"));
+  if (modeSelect) {
+    modeSelect.value = initialMode;
+  }
+  if (scopeSelect) {
+    scopeSelect.value = scopeFromQuery(params.get("scope"));
+  }
+
+  if (!mapName) {
+    setText("map-profile-title", "Perfil do mapa");
+    setHTML("map-profile-summary", `<div class="notice">Mapa não informado. Volte para a <a class="map-profile-link" href="maps.html">lista de mapas</a>.</div>`);
+    setHTML("map-profile-records-body", `<tr><td colspan="5">Selecione um mapa na página de mapas.</td></tr>`);
+    return;
+  }
+
+  setText("map-profile-title", mapName);
+
+  function setMapProfileTableLoading(label = "Carregando records...") {
+    setHTML(
+      "map-profile-records-body",
+      `<tr><td colspan="5"><div class="leaderboard-loading-cell"><span class="loading-spinner" aria-hidden="true"></span><span>${label}</span></div></td></tr>`
+    );
+  }
+
+  function setMapProfileStatsLoading(label = "Carregando estatísticas...") {
+    setHTML(
+      "map-profile-stats",
+      `<div class="leaderboard-loading-cell"><span class="loading-spinner" aria-hidden="true"></span><span>${label}</span></div>`
+    );
+  }
+
+  function setMapProfileControlsLoading(isLoading) {
+    if (modeSelect) modeSelect.disabled = isLoading;
+    if (scopeSelect) scopeSelect.disabled = isLoading;
+  }
+
+  async function loadMapInfo() {
+    setMapProfileControlsLoading(true);
+    setMapProfileStatsLoading("Atualizando resumo e conclusões...");
+    try {
+      const scopedToHydra = isHydraScope();
+      const [mapData, countKzt, countSkz, countVnl] = await Promise.all([
+        gokzApi.mapByName(mapName),
+        gokzApi.mapPlayerCount({ mapName, mode: "kz_timer", stage: 0, scopedToHydra }),
+        gokzApi.mapPlayerCount({ mapName, mode: "kz_simple", stage: 0, scopedToHydra }),
+        gokzApi.mapPlayerCount({ mapName, mode: "kz_vanilla", stage: 0, scopedToHydra })
+      ]);
+
+      const imageUrl = mapPreviewImageUrl(mapData);
+      const authors = (mapData.authors || []).map((author) => author.alias || author.name).filter(Boolean).join(", ") || "-";
+      const validatedLabel = mapData.validated ? "Sim" : "Não";
+
+      setHTML(
+        "map-profile-summary",
+        `<div class="map-profile-head">
+          <div class="map-profile-cover-wrap">
+            ${
+              imageUrl
+                ? `<img class="map-profile-cover" src="${escapeHtml(imageUrl)}" alt="Preview do mapa ${escapeHtml(mapData.name || mapName)}" loading="lazy" referrerpolicy="no-referrer" />`
+                : `<div class="map-profile-cover-fallback">Sem imagem disponível</div>`
+            }
+          </div>
+          <div class="map-profile-meta">
+            <h3>${escapeHtml(mapData.name || mapName)}</h3>
+            <p><span class="tag">Dificuldade</span> ${mapData.difficulty ?? "-"}</p>
+            <p><span class="tag">Validado</span> ${validatedLabel}</p>
+            <p><span class="tag">Autores</span> ${escapeHtml(authors)}</p>
+            <p><span class="tag">Atualizado</span> ${fmtDate(mapData.updated_on)}</p>
+            <p><span class="tag">Criado</span> ${fmtDate(mapData.created_on)}</p>
+          </div>
+        </div>`
+      );
+
+      setHTML(
+        "map-profile-stats",
+        `<div class="map-profile-stats-grid">
+          <div class="profile-pill"><span>Conclusões KZT</span><strong>${asNumber(countKzt).toLocaleString("pt-BR")}</strong></div>
+          <div class="profile-pill"><span>Conclusões SKZ</span><strong>${asNumber(countSkz).toLocaleString("pt-BR")}</strong></div>
+          <div class="profile-pill"><span>Conclusões VNL</span><strong>${asNumber(countVnl).toLocaleString("pt-BR")}</strong></div>
+        </div>`
+      );
+
+      mapProfileCounts = {
+        kzt: asNumber(countKzt),
+        skz: asNumber(countSkz),
+        vnl: asNumber(countVnl)
+      };
+    } catch (error) {
+      toastError("map-profile-fallback", error);
+    } finally {
+      setMapProfileControlsLoading(false);
+    }
+  }
+
+  async function loadMapRecords() {
+    setMapProfileControlsLoading(true);
+    setMapProfileTableLoading("Carregando leaderboard do mapa...");
+    setMapProfileStatsLoading("Atualizando métricas do modo...");
+    const selectedMode = String(modeSelect?.value || "kz_timer");
+    const selectedScope = String(scopeSelect?.value || "global");
+    const scopedToHydra = selectedScope === "hydra";
+    const nextParams = new URLSearchParams(window.location.search);
+    nextParams.set("name", mapName);
+    nextParams.set("mode", modeToQuery(selectedMode));
+    nextParams.set("scope", selectedScope);
+    window.history.replaceState(null, "", `map-profile.html?${nextParams.toString()}`);
+
+    try {
+      const [leaderboard, wrTpRows, wrProRows, tpCount, proCount] = await Promise.all([
+        gokzApi.mapLeaderboard({
+          mapName,
+          mode: selectedMode,
+          stage: 0,
+          limit: 100,
+          scopedToHydra
+        }),
+        gokzApi.mapLeaderboard({
+          mapName,
+          mode: selectedMode,
+          stage: 0,
+          limit: 1,
+          hasTeleports: true,
+          scopedToHydra
+        }),
+        gokzApi.mapLeaderboard({
+          mapName,
+          mode: selectedMode,
+          stage: 0,
+          limit: 1,
+          hasTeleports: false,
+          scopedToHydra
+        }),
+        gokzApi.mapPlayerCount({
+          mapName,
+          mode: selectedMode,
+          stage: 0,
+          hasTeleports: true,
+          scopedToHydra
+        }),
+        gokzApi.mapPlayerCount({
+          mapName,
+          mode: selectedMode,
+          stage: 0,
+          hasTeleports: false,
+          scopedToHydra
+        })
+      ]);
+
+      const wrOverall = leaderboard?.[0] || null;
+      const wrTp = wrTpRows?.[0] || null;
+      const wrPro = wrProRows?.[0] || null;
+      const modeLabel = modeLabelFromApiMode(selectedMode);
+
+      setHTML(
+        "map-profile-stats",
+        `<div class="map-profile-stats-grid">
+          <div class="profile-pill"><span>Conclusões KZT</span><strong>${mapProfileCounts.kzt.toLocaleString("pt-BR")}</strong></div>
+          <div class="profile-pill"><span>Conclusões SKZ</span><strong>${mapProfileCounts.skz.toLocaleString("pt-BR")}</strong></div>
+          <div class="profile-pill"><span>Conclusões VNL</span><strong>${mapProfileCounts.vnl.toLocaleString("pt-BR")}</strong></div>
+          <div class="profile-pill"><span>Escopo</span><strong>${scopedToHydra ? "Só Hydra" : "Global"}</strong></div>
+          <div class="profile-pill"><span>Modo ativo</span><strong>${escapeHtml(modeLabel)}</strong></div>
+          <div class="profile-pill"><span>WR (geral)</span><strong>${wrLabel(wrOverall)}</strong></div>
+          <div class="profile-pill"><span>WR TP</span><strong>${wrLabel(wrTp)}</strong></div>
+          <div class="profile-pill"><span>WR PRO</span><strong>${wrLabel(wrPro)}</strong></div>
+          <div class="profile-pill"><span>Média Top 20</span><strong>${averageTime((leaderboard || []).slice(0, 20))}</strong></div>
+          <div class="profile-pill"><span>Completions TP/PRO</span><strong>${asNumber(tpCount).toLocaleString("pt-BR")} / ${asNumber(proCount).toLocaleString("pt-BR")}</strong></div>
+        </div>`
+      );
+
+      if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
+        setHTML("map-profile-records-body", `<tr><td colspan="5">Sem completions encontrados para este modo.</td></tr>`);
+        return;
+      }
+
+      renderRows("map-profile-records-body", leaderboard, (row, index) => `
+        <tr>
+          <td>#${index + 1}</td>
+          <td><a class="player-profile-link" href="${playerProfileHref(row)}" data-preview-steamid="${escapeHtml(String(row.steamid64 || ""))}" data-preview-mode="${escapeHtml(modeLabel)}" data-preview-name="${escapeHtml(playerName(row))}">${escapeHtml(playerName(row))}</a></td>
+          <td>${fmtSeconds(row.time)}</td>
+          <td>${row.teleports ?? "-"}</td>
+          <td>${row.points ?? "-"}</td>
+        </tr>
+      `);
+      bindPlayerPreviewLinks("#map-profile-records-body .player-profile-link[data-preview-steamid]");
+    } catch (error) {
+      toastError("map-profile-fallback", error);
+    } finally {
+      setMapProfileControlsLoading(false);
+    }
+  }
+
+  modeSelect?.addEventListener("change", loadMapRecords);
+  scopeSelect?.addEventListener("change", async () => {
+    await loadMapInfo();
+    await loadMapRecords();
+  });
+  await loadMapInfo();
+  await loadMapRecords();
 }
 
 async function initActivity() {
@@ -1296,6 +1952,7 @@ async function boot() {
   else if (page === "leaderboards") await initLeaderboards();
   else if (page === "players") await initPlayers();
   else if (page === "maps") await initMaps();
+  else if (page === "map-profile") await initMapProfile();
   else if (page === "activity") await initActivity();
   else if (page === "rules") await initRules();
   else initSimplePage();

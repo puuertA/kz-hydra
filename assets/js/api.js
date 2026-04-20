@@ -297,17 +297,18 @@ const api = {
     return request(`/maps?${query.toString()}`);
   },
   mapByName: (mapName) => request(`/maps/name/${encodeURIComponent(mapName)}?include_wr_cache=true`),
-  mapLeaderboard: async ({ mapName, mode = "kz_timer", stage = 0, limit = 10 }) => {
-    const context = await resolveServerContext();
+  mapLeaderboard: async ({ mapName, mode = "kz_timer", stage = 0, limit = 10, hasTeleports = "", scopedToHydra = true }) => {
+    const context = scopedToHydra ? await resolveServerContext() : null;
     const query = new URLSearchParams({ mode, stage: String(stage), limit: String(limit) });
-    if (context.groupId) query.set("server_group_id", context.groupId);
+    if (hasTeleports !== "") query.set("has_teleports", String(hasTeleports));
+    if (context?.groupId) query.set("server_group_id", context.groupId);
     return request(`/records/map/${encodeURIComponent(mapName)}?${query.toString()}`);
   },
-  mapPlayerCount: async ({ mapName, mode = "kz_timer", stage = 0, hasTeleports = "" }) => {
-    const context = await resolveServerContext();
+  mapPlayerCount: async ({ mapName, mode = "kz_timer", stage = 0, hasTeleports = "", scopedToHydra = true }) => {
+    const context = scopedToHydra ? await resolveServerContext() : null;
     const query = new URLSearchParams({ mode, stage: String(stage) });
     if (hasTeleports !== "") query.set("has_teleports", String(hasTeleports));
-    if (context.groupId) query.set("server_group_id", context.groupId);
+    if (context?.groupId) query.set("server_group_id", context.groupId);
     return request(`/records/map/${encodeURIComponent(mapName)}/player-count?${query.toString()}`);
   },
   player: (steamid64) => request(`/players/${steamid64}`),
